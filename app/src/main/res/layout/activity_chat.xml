@@ -47,7 +47,7 @@
             android:id="@+id/btnAttach"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:src="@android:drawable/ic_menu_attach"
+            android:src="@drawable/ic_attach"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/btn_attach" />
 
@@ -65,7 +65,7 @@
             android:id="@+id/btnSend"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:src="@android:drawable/ic_menu_send"
+            android:src="@drawable/ic_send"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/btn_send" />
 
