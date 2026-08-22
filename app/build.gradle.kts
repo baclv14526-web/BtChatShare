@@ -1,7 +1,18 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+// ── Đọc version từ version.properties ──────────────────────────────────────
+val versionProps = Properties().apply {
+    val propsFile = rootProject.file("version.properties")
+    if (propsFile.exists()) load(propsFile.inputStream())
+}
+val appVersionName: String = versionProps.getProperty("VERSION_NAME", "1.0.0")
+val appVersionCode: Int    = versionProps.getProperty("VERSION_CODE", "1").trim().toInt()
+// ───────────────────────────────────────────────────────────────────────────
 
 android {
     namespace = "com.example.btchatshare"
@@ -11,8 +22,8 @@ android {
         applicationId = "com.example.btchatshare"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
     }
 
     buildTypes {
@@ -27,6 +38,18 @@ android {
             isMinifyEnabled = false
         }
     }
+
+    // ── Đặt tên file APK output: BtChatShare_{version}_{buildType}.apk ────
+    applicationVariants.all {
+        val variant = this
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                output.outputFileName =
+                    "BtChatShare_${variant.versionName}_${variant.buildType.name}.apk"
+            }
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
