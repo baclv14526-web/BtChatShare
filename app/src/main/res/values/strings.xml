@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">BT Chat Share</string>
+    <string name="select_device">Chọn thiết bị</string>
+    <string name="status_waiting">Đang chờ kết nối Bluetooth…</string>
+    <string name="status_connecting">Đang kết nối…</string>
+    <string name="status_connected">Đã kết nối: %1$s</string>
+    <string name="btn_connect_device">Kết nối tới thiết bị khác</string>
+    <string name="btn_make_discoverable">Cho phép thiết bị khác tìm thấy tôi</string>
+    <string name="btn_scan">Quét thiết bị xung quanh</string>
+    <string name="paired_devices">Thiết bị đã ghép nối</string>
+    <string name="found_devices">Thiết bị tìm thấy</string>
+    <string name="hint_message">Nhập tin nhắn…</string>
+    <string name="btn_send">Gửi</string>
+    <string name="btn_attach">Đính kèm file</string>
+    <string name="bluetooth_not_supported">Thiết bị không hỗ trợ Bluetooth</string>
+    <string name="please_enable_bluetooth">Vui lòng bật Bluetooth để tiếp tục</string>
+    <string name="permission_required">Cần cấp quyền Bluetooth để sử dụng ứng dụng</string>
+</resources>

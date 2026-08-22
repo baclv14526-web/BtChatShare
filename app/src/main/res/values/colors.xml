@@ -1,0 +1,10 @@
+<resources>
+    <color name="primary">#1565C0</color>
+    <color name="primary_dark">#0D47A1</color>
+    <color name="accent">#26A69A</color>
+    <color name="bubble_sent">#DCF8C6</color>
+    <color name="bubble_received">#FFFFFF</color>
+    <color name="bubble_system">#ECECEC</color>
+    <color name="text_primary">#212121</color>
+    <color name="background">#ECE5DD</color>
+</resources>

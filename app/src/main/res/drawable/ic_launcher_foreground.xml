@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Chat bubble -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,34 L84,34 A8,8 0 0 1 92,42 L92,66 A8,8 0 0 1 84,74 L48,74 L34,88 L34,74 L24,74 A8,8 0 0 1 16,66 L16,42 A8,8 0 0 1 24,34 Z" />
+    <!-- Bluetooth glyph -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M50,42 L50,66 L60,58 L52,52 L60,46 L50,42 Z" />
+</vector>
