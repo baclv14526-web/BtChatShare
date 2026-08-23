@@ -32,7 +32,7 @@ class BluetoothChatService(
 
     interface Listener {
         fun onStateChanged(state: Int)
-        fun onConnected(deviceName: String)
+        fun onConnected(deviceName: String, deviceAddress: String)
         fun onMessageReceived(text: String)
         fun onFileReceiveStarted(fileName: String, size: Long)
         fun onFileReceiveProgress(fileName: String, bytesReceived: Long, size: Long)
@@ -112,7 +112,7 @@ class BluetoothChatService(
         } catch (e: SecurityException) {
             device.address
         }
-        handler.post { listener.onConnected(name) }
+        handler.post { listener.onConnected(name, device.address) }
     }
 
     @Synchronized

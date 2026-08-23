@@ -15,4 +15,19 @@
     <string name="bluetooth_not_supported">Thiết bị không hỗ trợ Bluetooth</string>
     <string name="please_enable_bluetooth">Vui lòng bật Bluetooth để tiếp tục</string>
     <string name="permission_required">Cần cấp quyền Bluetooth để sử dụng ứng dụng</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Cài đặt thông báo</string>
+    <string name="settings_section_sound">Âm thanh</string>
+    <string name="settings_section_vibrate">Rung</string>
+    <string name="settings_sound_message">Âm khi nhận tin nhắn</string>
+    <string name="settings_sound_message_desc">Phát âm thông báo hệ thống khi có tin nhắn mới</string>
+    <string name="settings_sound_file">Âm khi nhận file</string>
+    <string name="settings_sound_file_desc">Phát âm thông báo khi nhận file thành công</string>
+    <string name="settings_vibrate_message">Rung khi nhận tin nhắn</string>
+    <string name="settings_vibrate_message_desc">Rung ngắn 1 lần khi có tin nhắn mới</string>
+    <string name="settings_vibrate_file">Rung khi nhận file</string>
+    <string name="settings_vibrate_file_desc">Rung 2 nhịp khi nhận file thành công</string>
+    <string name="settings_note">Bật/tắt Switch để nghe thử âm thanh và rung ngay lập tức</string>
+    <string name="menu_settings">Cài đặt</string>
 </resources>

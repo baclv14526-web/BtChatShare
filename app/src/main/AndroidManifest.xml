@@ -4,6 +4,9 @@
 
     <uses-feature android:name="android.hardware.bluetooth" android:required="true" />
 
+    <!-- Rung thiết bị -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Legacy Bluetooth permissions (Android 11 / API 30 and below) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
@@ -34,6 +37,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".SettingsActivity"
+            android:label="@string/settings_title"
+            android:exported="false"
+            android:parentActivityName=".ChatActivity" />
 
         <activity
             android:name=".DeviceListActivity"

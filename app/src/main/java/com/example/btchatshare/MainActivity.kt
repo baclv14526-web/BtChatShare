@@ -132,9 +132,10 @@ class MainActivity : AppCompatActivity(), BluetoothChatService.Listener {
         }
     }
 
-    override fun onConnected(deviceName: String) {
+    override fun onConnected(deviceName: String, deviceAddress: String) {
         startActivity(Intent(this, ChatActivity::class.java).apply {
             putExtra(ChatActivity.EXTRA_DEVICE_NAME, deviceName)
+            putExtra(ChatActivity.EXTRA_DEVICE_ADDRESS, deviceAddress)
         })
     }
 

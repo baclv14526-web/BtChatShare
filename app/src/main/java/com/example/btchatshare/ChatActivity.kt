@@ -1,25 +1,39 @@
 package com.example.btchatshare
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.btchatshare.databinding.ActivityChatBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import java.io.File
 
 class ChatActivity : AppCompatActivity(), BluetoothChatService.Listener {
 
     companion object {
-        const val EXTRA_DEVICE_NAME = "extra_device_name"
+        const val EXTRA_DEVICE_NAME    = "extra_device_name"
+        const val EXTRA_DEVICE_ADDRESS = "extra_device_address"
     }
 
     private lateinit var binding: ActivityChatBinding
-    private val app get() = application as App
+    private val app        get() = application as App
+    private val repo        get() = app.chatRepository
+    private val settings    get() = app.settings
+    private val notifHelper get() = app.notifHelper
     private lateinit var chatAdapter: ChatAdapter
-    private val messages = mutableListOf<ChatMessage>()
+
+    /** Địa chỉ MAC của thiết bị đối diện — dùng làm session ID trong DB. */
+    private var sessionId: String = "unknown"
 
     private val pickFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { sendFile(it) }
@@ -30,18 +44,19 @@ class ChatActivity : AppCompatActivity(), BluetoothChatService.Listener {
         binding = ActivityChatBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        title = intent.getStringExtra(EXTRA_DEVICE_NAME) ?: getString(R.string.app_name)
+        sessionId = intent.getStringExtra(EXTRA_DEVICE_ADDRESS) ?: "unknown"
+        title     = intent.getStringExtra(EXTRA_DEVICE_NAME)    ?: getString(R.string.app_name)
 
-        chatAdapter = ChatAdapter(messages)
+        chatAdapter = ChatAdapter(mutableListOf())
         binding.recyclerMessages.layoutManager = LinearLayoutManager(this).apply {
             stackFromEnd = true
         }
         binding.recyclerMessages.adapter = chatAdapter
 
-        binding.btnSend.setOnClickListener { sendTypedMessage() }
-        binding.btnAttach.setOnClickListener {
-            pickFile.launch(arrayOf("*/*"))
-        }
+        binding.btnSend.setOnClickListener   { sendTypedMessage() }
+        binding.btnAttach.setOnClickListener { pickFile.launch(arrayOf("*/*")) }
+
+        loadHistory()
     }
 
     override fun onResume() {
@@ -54,11 +69,65 @@ class ChatActivity : AppCompatActivity(), BluetoothChatService.Listener {
         app.currentListener = null
     }
 
+    // ── Menu (nút xóa lịch sử) ─────────────────────────────────────────────
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_chat, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_settings) {
+            startActivity(Intent(this, SettingsActivity::class.java))
+            return true
+        }
+        if (item.itemId == R.id.action_clear_history) {
+            confirmClearHistory()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    private fun confirmClearHistory() {
+        AlertDialog.Builder(this)
+            .setTitle("Xóa lịch sử chat")
+            .setMessage("Toàn bộ tin nhắn với thiết bị này sẽ bị xóa vĩnh viễn. Tiếp tục?")
+            .setPositiveButton("Xóa") { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    repo.deleteSession(sessionId)
+                }
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    // ── Load lịch sử từ DB ─────────────────────────────────────────────────
+
+    /**
+     * Observe Flow từ DB — khi có tin nhắn mới được lưu (kể cả từ luồng BT),
+     * RecyclerView tự cập nhật.
+     */
+    private fun loadHistory() {
+        lifecycleScope.launch {
+            repo.observeMessages(sessionId).collectLatest { history ->
+                chatAdapter.submitList(history)
+                if (history.isNotEmpty()) {
+                    binding.recyclerMessages.scrollToPosition(history.size - 1)
+                }
+            }
+        }
+    }
+
+    // ── Gửi ────────────────────────────────────────────────────────────────
+
     private fun sendTypedMessage() {
         val text = binding.etMessage.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) return
         app.chatService.sendText(text)
-        addMessage(text, mine = true)
+        // Lưu vào DB — Flow sẽ tự cập nhật RecyclerView
+        lifecycleScope.launch(Dispatchers.IO) {
+            repo.saveText(sessionId, text, isMine = true)
+        }
         binding.etMessage.setText("")
     }
 
@@ -67,34 +136,32 @@ class ChatActivity : AppCompatActivity(), BluetoothChatService.Listener {
         var name = "file"
         var size = -1L
         resolver.query(uri, null, null, null, null)?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+            val ni = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            val si = cursor.getColumnIndex(OpenableColumns.SIZE)
             if (cursor.moveToFirst()) {
-                if (nameIndex >= 0) name = cursor.getString(nameIndex) ?: name
-                if (sizeIndex >= 0) size = cursor.getLong(sizeIndex)
+                if (ni >= 0) name = cursor.getString(ni) ?: name
+                if (si >= 0) size = cursor.getLong(si)
             }
         }
         if (size <= 0) {
             Toast.makeText(this, "Không đọc được kích thước file", Toast.LENGTH_SHORT).show()
             return
         }
-        val input = resolver.openInputStream(uri)
-        if (input == null) {
+        val input = resolver.openInputStream(uri) ?: run {
             Toast.makeText(this, "Không thể mở file", Toast.LENGTH_SHORT).show()
             return
         }
-        addMessage("📎 Đang gửi: $name", mine = true)
+        lifecycleScope.launch(Dispatchers.IO) {
+            repo.saveFileSent(sessionId, "📎 Đang gửi: $name")
+        }
         app.chatService.sendFile(name, size, input)
     }
 
-    private fun addMessage(text: String, mine: Boolean) {
-        chatAdapter.addMessage(ChatMessage(text, mine))
-        binding.recyclerMessages.scrollToPosition(chatAdapter.itemCount - 1)
-    }
+    // ── Helpers UI ─────────────────────────────────────────────────────────
 
     private fun showTransfer(text: String, percent: Int) {
         binding.layoutTransfer.visibility = android.view.View.VISIBLE
-        binding.tvTransferStatus.text = text
+        binding.tvTransferStatus.text     = text
         binding.progressTransfer.progress = percent
     }
 
@@ -102,7 +169,7 @@ class ChatActivity : AppCompatActivity(), BluetoothChatService.Listener {
         binding.layoutTransfer.visibility = android.view.View.GONE
     }
 
-    // ---- BluetoothChatService.Listener ----
+    // ── BluetoothChatService.Listener ──────────────────────────────────────
 
     override fun onStateChanged(state: Int) {
         if (state == BluetoothChatService.STATE_NONE) {
@@ -111,37 +178,52 @@ class ChatActivity : AppCompatActivity(), BluetoothChatService.Listener {
         }
     }
 
-    override fun onConnected(deviceName: String) {
+    override fun onConnected(deviceName: String, deviceAddress: String) {
         title = deviceName
     }
 
     override fun onMessageReceived(text: String) {
-        addMessage(text, mine = false)
+        // Âm thanh + rung
+        if (settings.soundOnMessage)   notifHelper.playMessageSound()
+        if (settings.vibrateOnMessage) notifHelper.vibrateForMessage()
+        // Lưu DB — Flow observe tự cập nhật UI
+        lifecycleScope.launch(Dispatchers.IO) {
+            repo.saveText(sessionId, text, isMine = false)
+        }
     }
 
     override fun onFileReceiveStarted(fileName: String, size: Long) {
-        addMessage("📎 Đang nhận: $fileName", mine = false)
         showTransfer("Đang nhận $fileName (0%)", 0)
     }
 
     override fun onFileReceiveProgress(fileName: String, bytesReceived: Long, size: Long) {
-        val percent = if (size > 0) ((bytesReceived * 100) / size).toInt() else 0
-        showTransfer("Đang nhận $fileName ($percent%)", percent)
+        val pct = if (size > 0) ((bytesReceived * 100) / size).toInt() else 0
+        showTransfer("Đang nhận $fileName ($pct%)", pct)
     }
 
     override fun onFileReceived(fileName: String, file: File) {
         hideTransfer()
-        addMessage("✅ Đã nhận file: $fileName (${file.length()} bytes)\nLưu tại: ${file.absolutePath}", mine = false)
+        // Âm thanh + rung
+        if (settings.soundOnFile)   notifHelper.playFileSound()
+        if (settings.vibrateOnFile) notifHelper.vibrateForFile()
+        lifecycleScope.launch(Dispatchers.IO) {
+            repo.saveFileReceived(
+                sessionId,
+                "✅ Đã nhận file: $fileName (${file.length()} bytes)\nLưu tại: ${file.absolutePath}"
+            )
+        }
     }
 
     override fun onFileSendProgress(fileName: String, bytesSent: Long, size: Long) {
-        val percent = if (size > 0) ((bytesSent * 100) / size).toInt() else 0
-        showTransfer("Đang gửi $fileName ($percent%)", percent)
+        val pct = if (size > 0) ((bytesSent * 100) / size).toInt() else 0
+        showTransfer("Đang gửi $fileName ($pct%)", pct)
     }
 
     override fun onFileSent(fileName: String) {
         hideTransfer()
-        addMessage("✅ Đã gửi xong: $fileName", mine = true)
+        lifecycleScope.launch(Dispatchers.IO) {
+            repo.saveFileSent(sessionId, "✅ Đã gửi xong: $fileName")
+        }
     }
 
     override fun onError(message: String) {
