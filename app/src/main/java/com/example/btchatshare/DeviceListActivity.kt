@@ -90,10 +90,12 @@ class DeviceListActivity : AppCompatActivity() {
         if (adapter.isDiscovering) {
             adapter.cancelDiscovery()
         }
-        // MainActivity (still alive underneath) is the current listener and will
-        // receive onConnected() and navigate to ChatActivity once the socket is up.
+        // Xoá listener của màn hình này (nếu có) TRƯỚC khi finish(),
+        // để MainActivity.onResume() set lại listener ngay sau khi stack pop.
+        // chatService.connect() chạy trên background thread — onConnected()
+        // sẽ fire sau khi MainActivity đã resume và set currentListener lại rồi.
         app.chatService.connect(device)
-        finish()
+        finish()  // MainActivity.onResume() → currentListener = MainActivity → flush pending
     }
 
     private fun hasConnectPermission(): Boolean {
