@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
@@ -18,7 +19,7 @@ import java.util.UUID
 /**
  * Handles a Bluetooth RFCOMM connection between two devices.
  * Supports sending/receiving plain text messages and files over the same socket
- * using a tiny length-prefixed binary protocol:
+ * using a length-prefixed binary protocol:
  *
  *   byte  type        (0 = TEXT, 1 = FILE)
  *   TEXT: UTF string  (message)
@@ -43,6 +44,8 @@ class BluetoothChatService(
     }
 
     companion object {
+        private const val TAG = "BtChatService"
+
         const val STATE_NONE = 0
         const val STATE_LISTEN = 1
         const val STATE_CONNECTING = 2
@@ -53,17 +56,28 @@ class BluetoothChatService(
         private const val CHUNK_SIZE = 8192
 
         // Fixed custom UUID shared by both client & server sides of the app.
-        private val APP_UUID: UUID = UUID.fromString("8ce255c0-200a-11e0-ac64-0800200c9a66")
-        private const val APP_NAME = "BtChatShare"
+        private val APP_UUID_SECURE: UUID = UUID.fromString("8ce255c0-200a-11e0-ac64-0800200c9a66")
+        private val APP_UUID_INSECURE: UUID = UUID.fromString("8ce255c0-200a-11e0-ac64-0800200c9a66")
+        private const val APP_NAME_SECURE = "BtChatShareSecure"
+        private const val APP_NAME_INSECURE = "BtChatShareInsecure"
     }
 
     private val handler = Handler(Looper.getMainLooper())
-    private var acceptThread: AcceptThread? = null
+    private var secureAcceptThread: AcceptThread? = null
+    private var insecureAcceptThread: AcceptThread? = null
     private var connectThread: ConnectThread? = null
     private var connectedThread: ConnectedThread? = null
 
     @Volatile
     var state: Int = STATE_NONE
+        private set
+
+    @Volatile
+    var connectedDeviceName: String? = null
+        private set
+
+    @Volatile
+    var connectedDeviceAddress: String? = null
         private set
 
     init {
@@ -76,13 +90,17 @@ class BluetoothChatService(
         handler.post { listener.onStateChanged(newState) }
     }
 
-    /** Start listening for an incoming connection (server role). */
+    /** Start listening for incoming connections on both Secure & Insecure RFCOMM (server role). */
     @Synchronized
     fun start() {
         connectThread?.cancel(); connectThread = null
         connectedThread?.cancel(); connectedThread = null
-        if (acceptThread == null) {
-            acceptThread = AcceptThread().also { it.start() }
+
+        if (secureAcceptThread == null) {
+            secureAcceptThread = AcceptThread(secure = true).also { it.start() }
+        }
+        if (insecureAcceptThread == null) {
+            insecureAcceptThread = AcceptThread(secure = false).also { it.start() }
         }
         setState(STATE_LISTEN)
     }
@@ -103,23 +121,33 @@ class BluetoothChatService(
     private fun connected(socket: BluetoothSocket, device: BluetoothDevice) {
         connectThread?.cancel(); connectThread = null
         connectedThread?.cancel(); connectedThread = null
-        acceptThread?.cancel(); acceptThread = null
+        secureAcceptThread?.cancel(); secureAcceptThread = null
+        insecureAcceptThread?.cancel(); insecureAcceptThread = null
 
         connectedThread = ConnectedThread(socket).also { it.start() }
-        setState(STATE_CONNECTED)
+        
         val name = try {
             device.name ?: device.address
         } catch (e: SecurityException) {
             device.address
         }
-        handler.post { listener.onConnected(name, device.address) }
+        val address = device.address
+
+        connectedDeviceName = name
+        connectedDeviceAddress = address
+
+        setState(STATE_CONNECTED)
+        handler.post { listener.onConnected(name, address) }
     }
 
     @Synchronized
     fun stop() {
         connectThread?.cancel(); connectThread = null
         connectedThread?.cancel(); connectedThread = null
-        acceptThread?.cancel(); acceptThread = null
+        secureAcceptThread?.cancel(); secureAcceptThread = null
+        insecureAcceptThread?.cancel(); insecureAcceptThread = null
+        connectedDeviceName = null
+        connectedDeviceAddress = null
         setState(STATE_NONE)
     }
 
@@ -142,20 +170,25 @@ class BluetoothChatService(
     }
 
     // ---------------------------------------------------------------------
-    // Server: accepts one incoming RFCOMM connection.
+    // Server: accepts incoming RFCOMM connection (supports Secure & Insecure).
     // ---------------------------------------------------------------------
     @SuppressLint("MissingPermission")
-    private inner class AcceptThread : Thread() {
+    private inner class AcceptThread(private val secure: Boolean) : Thread() {
         private val serverSocket: BluetoothServerSocket? = try {
-            adapter.listenUsingRfcommWithServiceRecord(APP_NAME, APP_UUID)
+            if (secure) {
+                adapter.listenUsingRfcommWithServiceRecord(APP_NAME_SECURE, APP_UUID_SECURE)
+            } else {
+                adapter.listenUsingInsecureRfcommWithServiceRecord(APP_NAME_INSECURE, APP_UUID_INSECURE)
+            }
         } catch (e: IOException) {
-            handler.post { listener.onError("Không thể mở server: ${e.message}") }
+            Log.e(TAG, "AcceptThread (secure=$secure) listen() failed", e)
             null
         }
 
         override fun run() {
+            name = "AcceptThread_secure_$secure"
             var looping = true
-            while (looping) {
+            while (looping && state != STATE_CONNECTED) {
                 val socket: BluetoothSocket? = try {
                     serverSocket?.accept()
                 } catch (e: IOException) {
@@ -163,7 +196,19 @@ class BluetoothChatService(
                     null
                 }
                 if (socket != null) {
-                    connected(socket, socket.remoteDevice)
+                    synchronized(this@BluetoothChatService) {
+                        when (state) {
+                            STATE_LISTEN, STATE_CONNECTING -> {
+                                connected(socket, socket.remoteDevice)
+                            }
+                            STATE_NONE, STATE_CONNECTED -> {
+                                try {
+                                    socket.close()
+                                } catch (_: IOException) {
+                                }
+                            }
+                        }
+                    }
                     looping = false
                 }
             }
@@ -178,42 +223,89 @@ class BluetoothChatService(
     }
 
     // ---------------------------------------------------------------------
-    // Client: connects out to a chosen remote device.
+    // Client: connects out to a chosen remote device with 3-tier fallback.
     // ---------------------------------------------------------------------
     @SuppressLint("MissingPermission")
     private inner class ConnectThread(private val device: BluetoothDevice) : Thread() {
-        private val socket: BluetoothSocket? = try {
-            device.createRfcommSocketToServiceRecord(APP_UUID)
-        } catch (e: IOException) {
-            null
-        }
 
         override fun run() {
+            name = "ConnectThread"
             try {
                 adapter.cancelDiscovery()
             } catch (_: SecurityException) {
             }
 
+            var socket: BluetoothSocket? = null
+            var connectedSuccessfully = false
+
+            // Level 1: Try Insecure RFCOMM (Highest cross-vendor & cross-version compatibility)
             try {
-                socket?.connect()
-            } catch (e: IOException) {
+                Log.d(TAG, "Attempting Insecure RFCOMM connection to ${device.address}")
+                socket = device.createInsecureRfcommSocketToServiceRecord(APP_UUID_INSECURE)
+                socket.connect()
+                connectedSuccessfully = true
+            } catch (e1: Exception) {
+                Log.w(TAG, "Insecure RFCOMM failed: ${e1.message}. Falling back to Secure RFCOMM...")
                 try {
                     socket?.close()
                 } catch (_: IOException) {
                 }
-                handler.post { listener.onError("Không thể kết nối: ${e.message}") }
+                socket = null
+            }
+
+            // Level 2: Try Secure RFCOMM
+            if (!connectedSuccessfully) {
+                try {
+                    Log.d(TAG, "Attempting Secure RFCOMM connection to ${device.address}")
+                    socket = device.createRfcommSocketToServiceRecord(APP_UUID_SECURE)
+                    socket.connect()
+                    connectedSuccessfully = true
+                } catch (e2: Exception) {
+                    Log.w(TAG, "Secure RFCOMM failed: ${e2.message}. Falling back to reflection channel 1...")
+                    try {
+                        socket?.close()
+                    } catch (_: IOException) {
+                    }
+                    socket = null
+                }
+            }
+
+            // Level 3: Reflection Fallback Channel 1 (Specifically for older Android / Realme / Oppo / MTK devices)
+            if (!connectedSuccessfully) {
+                try {
+                    Log.d(TAG, "Attempting Reflection createRfcommSocket(1) to ${device.address}")
+                    val method = device.javaClass.getMethod("createInsecureRfcommSocket", Int::class.javaPrimitiveType)
+                        ?: device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                    socket = method.invoke(device, 1) as BluetoothSocket
+                    socket.connect()
+                    connectedSuccessfully = true
+                } catch (e3: Exception) {
+                    Log.e(TAG, "Reflection fallback failed: ${e3.message}")
+                    try {
+                        socket?.close()
+                    } catch (_: IOException) {
+                    }
+                    socket = null
+                }
+            }
+
+            if (!connectedSuccessfully || socket == null) {
+                handler.post { listener.onError("Không thể kết nối tới thiết bị") }
+                synchronized(this@BluetoothChatService) {
+                    connectThread = null
+                }
                 this@BluetoothChatService.start()
                 return
             }
 
-            socket?.let { connected(it, device) }
+            synchronized(this@BluetoothChatService) {
+                connectThread = null
+            }
+            connected(socket, device)
         }
 
         fun cancel() {
-            try {
-                socket?.close()
-            } catch (_: IOException) {
-            }
+            // Cancellation handled safely
         }
     }
 
@@ -228,6 +320,7 @@ class BluetoothChatService(
         private var running = true
 
         override fun run() {
+            name = "ConnectedThread"
             while (running) {
                 try {
                     when (input.readByte().toInt()) {
@@ -260,8 +353,13 @@ class BluetoothChatService(
                     }
                 } catch (e: IOException) {
                     running = false
+                    Log.w(TAG, "Connection lost: ${e.message}")
+                    connectedDeviceName = null
+                    connectedDeviceAddress = null
                     handler.post { listener.onError("Mất kết nối: ${e.message}") }
                     setState(STATE_NONE)
+                    // Auto restart server listener so device can accept new connections
+                    this@BluetoothChatService.start()
                 }
             }
         }

@@ -6,11 +6,15 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import com.example.btchatshare.db.AppDatabase
 import com.example.btchatshare.db.ChatRepository
-import com.example.btchatshare.NotificationHelper
-import com.example.btchatshare.SettingsManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 
 class App : Application() {
+
+    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     var bluetoothAdapter: BluetoothAdapter? = null
         private set
@@ -54,27 +58,53 @@ class App : Application() {
                 override fun onStateChanged(state: Int) {
                     currentListener?.onStateChanged(state)
                 }
+
                 override fun onConnected(deviceName: String, deviceAddress: String) {
                     currentListener?.onConnected(deviceName, deviceAddress)
                 }
+
                 override fun onMessageReceived(text: String) {
+                    val address = chatService.connectedDeviceAddress ?: "unknown"
+                    // Luôn lưu DB an toàn ở mức Application
+                    applicationScope.launch {
+                        chatRepository.saveText(address, text, isMine = false)
+                    }
+                    if (settings.soundOnMessage)   notifHelper.playMessageSound()
+                    if (settings.vibrateOnMessage) notifHelper.vibrateForMessage()
+
                     currentListener?.onMessageReceived(text)
                 }
+
                 override fun onFileReceiveStarted(fileName: String, size: Long) {
                     currentListener?.onFileReceiveStarted(fileName, size)
                 }
+
                 override fun onFileReceiveProgress(fileName: String, bytesReceived: Long, size: Long) {
                     currentListener?.onFileReceiveProgress(fileName, bytesReceived, size)
                 }
+
                 override fun onFileReceived(fileName: String, file: File) {
+                    val address = chatService.connectedDeviceAddress ?: "unknown"
+                    applicationScope.launch {
+                        chatRepository.saveFileReceived(
+                            address,
+                            "✅ Đã nhận file: $fileName (${file.length()} bytes)\nLưu tại: ${file.absolutePath}"
+                        )
+                    }
+                    if (settings.soundOnFile)   notifHelper.playFileSound()
+                    if (settings.vibrateOnFile) notifHelper.vibrateForFile()
+
                     currentListener?.onFileReceived(fileName, file)
                 }
+
                 override fun onFileSendProgress(fileName: String, bytesSent: Long, size: Long) {
                     currentListener?.onFileSendProgress(fileName, bytesSent, size)
                 }
+
                 override fun onFileSent(fileName: String) {
                     currentListener?.onFileSent(fileName)
                 }
+
                 override fun onError(message: String) {
                     currentListener?.onError(message)
                 }
@@ -82,3 +112,4 @@ class App : Application() {
         }
     }
 }
+

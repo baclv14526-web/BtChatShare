@@ -183,13 +183,7 @@ class ChatActivity : AppCompatActivity(), BluetoothChatService.Listener {
     }
 
     override fun onMessageReceived(text: String) {
-        // Âm thanh + rung
-        if (settings.soundOnMessage)   notifHelper.playMessageSound()
-        if (settings.vibrateOnMessage) notifHelper.vibrateForMessage()
-        // Lưu DB — Flow observe tự cập nhật UI
-        lifecycleScope.launch(Dispatchers.IO) {
-            repo.saveText(sessionId, text, isMine = false)
-        }
+        // App.kt đã lưu DB và phát chuông/rung — Room Flow tự động cập nhật RecyclerView
     }
 
     override fun onFileReceiveStarted(fileName: String, size: Long) {
@@ -203,15 +197,7 @@ class ChatActivity : AppCompatActivity(), BluetoothChatService.Listener {
 
     override fun onFileReceived(fileName: String, file: File) {
         hideTransfer()
-        // Âm thanh + rung
-        if (settings.soundOnFile)   notifHelper.playFileSound()
-        if (settings.vibrateOnFile) notifHelper.vibrateForFile()
-        lifecycleScope.launch(Dispatchers.IO) {
-            repo.saveFileReceived(
-                sessionId,
-                "✅ Đã nhận file: $fileName (${file.length()} bytes)\nLưu tại: ${file.absolutePath}"
-            )
-        }
+        // App.kt đã lưu DB và phát chuông/rung — Room Flow tự động cập nhật RecyclerView
     }
 
     override fun onFileSendProgress(fileName: String, bytesSent: Long, size: Long) {

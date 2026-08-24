@@ -66,6 +66,19 @@ class MainActivity : AppCompatActivity(), BluetoothChatService.Listener {
     override fun onResume() {
         super.onResume()
         app.currentListener = this
+
+        if (app.chatService.state == BluetoothChatService.STATE_CONNECTED) {
+            val name = app.chatService.connectedDeviceName ?: "Bluetooth Device"
+            val addr = app.chatService.connectedDeviceAddress ?: "unknown"
+            startActivity(Intent(this, ChatActivity::class.java).apply {
+                putExtra(ChatActivity.EXTRA_DEVICE_NAME, name)
+                putExtra(ChatActivity.EXTRA_DEVICE_ADDRESS, addr)
+            })
+        } else if (app.chatService.state == BluetoothChatService.STATE_NONE && hasAllPermissions()) {
+            afterPermissionsGranted()
+        } else {
+            updateStatusText(app.chatService.state)
+        }
     }
 
     override fun onPause() {
@@ -122,14 +135,22 @@ class MainActivity : AppCompatActivity(), BluetoothChatService.Listener {
         requestDiscoverable.launch(intent)
     }
 
-    // ---- BluetoothChatService.Listener ----
-
-    override fun onStateChanged(state: Int) {
+    private fun updateStatusText(state: Int) {
         binding.tvStatus.text = when (state) {
             BluetoothChatService.STATE_LISTEN -> getString(R.string.status_waiting)
             BluetoothChatService.STATE_CONNECTING -> getString(R.string.status_connecting)
+            BluetoothChatService.STATE_CONNECTED -> {
+                val name = app.chatService.connectedDeviceName ?: ""
+                getString(R.string.status_connected, name)
+            }
             else -> getString(R.string.status_waiting)
         }
+    }
+
+    // ---- BluetoothChatService.Listener ----
+
+    override fun onStateChanged(state: Int) {
+        updateStatusText(state)
     }
 
     override fun onConnected(deviceName: String, deviceAddress: String) {
@@ -139,12 +160,12 @@ class MainActivity : AppCompatActivity(), BluetoothChatService.Listener {
         })
     }
 
-    override fun onMessageReceived(text: String) { /* handled in ChatActivity */ }
-    override fun onFileReceiveStarted(fileName: String, size: Long) { /* handled in ChatActivity */ }
-    override fun onFileReceiveProgress(fileName: String, bytesReceived: Long, size: Long) { /* handled in ChatActivity */ }
-    override fun onFileReceived(fileName: String, file: File) { /* handled in ChatActivity */ }
-    override fun onFileSendProgress(fileName: String, bytesSent: Long, size: Long) { /* handled in ChatActivity */ }
-    override fun onFileSent(fileName: String) { /* handled in ChatActivity */ }
+    override fun onMessageReceived(text: String) { /* handled in ChatActivity & App */ }
+    override fun onFileReceiveStarted(fileName: String, size: Long) { /* handled in ChatActivity & App */ }
+    override fun onFileReceiveProgress(fileName: String, bytesReceived: Long, size: Long) { /* handled in ChatActivity & App */ }
+    override fun onFileReceived(fileName: String, file: File) { /* handled in ChatActivity & App */ }
+    override fun onFileSendProgress(fileName: String, bytesSent: Long, size: Long) { /* handled in ChatActivity & App */ }
+    override fun onFileSent(fileName: String) { /* handled in ChatActivity & App */ }
 
     override fun onError(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
