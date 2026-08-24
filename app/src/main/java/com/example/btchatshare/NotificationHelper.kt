@@ -9,45 +9,46 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import androidx.annotation.RequiresApi
 
 /**
  * Phát âm thanh thông báo và rung thiết bị khi nhận tin nhắn hoặc file.
- * Tôn trọng chế độ im lặng / rung của máy thông qua [AudioManager].
+ *
+ * - Âm thanh: dùng ringtone thông báo mặc định của hệ thống (TYPE_NOTIFICATION)
+ *   thông qua [MediaPlayer] — không cần file âm thanh đính kèm trong app.
+ * - Rung: dùng [VibrationEffect] (API 26+) với pattern ngắn cho tin nhắn,
+ *   pattern dài hơn cho file nhận xong.
+ * - Tôn trọng chế độ im lặng / rung của máy thông qua [AudioManager].
  */
 class NotificationHelper(private val context: Context) {
 
-    private val audioManager =
-        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
-    // Lấy Vibrator đúng API — tránh reference trực tiếp VibratorManager ở tầng class
-    // để không cần @RequiresApi trên toàn class.
-    @Suppress("DEPRECATION")
-    private val vibrator: Vibrator = getVibrator()
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     @Suppress("DEPRECATION")
-    private fun getVibrator(): Vibrator =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            getVibratorApi31()
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun getVibratorApi31(): Vibrator =
+    private val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager)
             .defaultVibrator
+    } else {
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
 
     // ── Âm thanh ──────────────────────────────────────────────────────────
 
+    /**
+     * Phát âm thông báo mặc định của hệ thống.
+     * Tự động tôn trọng chế độ im lặng / Không làm phiền.
+     */
     fun playMessageSound() = playNotificationSound()
-    fun playFileSound()    = playNotificationSound()
+
+    fun playFileSound() = playNotificationSound()
 
     private fun playNotificationSound() {
-        if (audioManager.ringerMode == AudioManager.RINGER_MODE_SILENT) return
+        // Không phát nếu điện thoại đang im lặng hoàn toàn
+        val mode = audioManager.ringerMode
+        if (mode == AudioManager.RINGER_MODE_SILENT) return
+
         try {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION) ?: return
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                ?: return
             MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -56,30 +57,42 @@ class NotificationHelper(private val context: Context) {
                         .build()
                 )
                 setDataSource(context, uri)
-                setOnPreparedListener  { start() }
+                setOnPreparedListener { start() }
                 setOnCompletionListener { release() }
-                setOnErrorListener     { mp, _, _ -> mp.release(); true }
+                setOnErrorListener { mp, _, _ -> mp.release(); true }
                 prepareAsync()
             }
-        } catch (_: Exception) { /* thiết bị không có ringtone mặc định */ }
+        } catch (_: Exception) {
+            // Thiết bị không có ringtone mặc định — bỏ qua
+        }
     }
 
     // ── Rung ──────────────────────────────────────────────────────────────
 
-    /** Rung 1 nhịp ngắn — khi nhận tin nhắn. */
+    /**
+     * Rung ngắn 1 lần — dùng khi nhận tin nhắn văn bản.
+     * Pattern: rung 200ms.
+     */
     fun vibrateForMessage() {
-        if (vibrator.hasVibrator()) vibrate(longArrayOf(0, 200))
+        if (!vibrator.hasVibrator()) return
+        vibrate(longArrayOf(0, 200))
     }
 
-    /** Rung 2 nhịp — khi nhận file xong. */
+    /**
+     * Rung 2 nhịp — dùng khi nhận file xong.
+     * Pattern: rung 150ms, nghỉ 100ms, rung 300ms.
+     */
     fun vibrateForFile() {
-        if (vibrator.hasVibrator()) vibrate(longArrayOf(0, 150, 100, 300))
+        if (!vibrator.hasVibrator()) return
+        vibrate(longArrayOf(0, 150, 100, 300))
     }
 
     @Suppress("DEPRECATION")
     private fun vibrate(pattern: LongArray) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+            vibrator.vibrate(
+                VibrationEffect.createWaveform(pattern, -1 /* không lặp */)
+            )
         } else {
             vibrator.vibrate(pattern, -1)
         }

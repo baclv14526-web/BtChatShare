@@ -33,9 +33,8 @@ class App : Application() {
     var currentListener: BluetoothChatService.Listener? = null
         set(value) {
             field = value
-            // Flush sự kiện onConnected bị treo do listener null lúc chuyển Activity.
-            // Guard bằng isInitialized vì setter có thể được gọi trước onCreate() hoàn tất.
-            if (value != null && ::chatService.isInitialized) {
+            // Flush sự kiện onConnected bị treo do listener null lúc chuyển Activity
+            if (value != null) {
                 chatService.setListener(value)
             }
         }

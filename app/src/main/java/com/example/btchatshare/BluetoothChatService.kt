@@ -320,8 +320,8 @@ class BluetoothChatService(
 
     private inner class ConnectedThread(private val socket: BluetoothSocket) : Thread("BtConnected") {
 
-        private val input  = DataInputStream(socket.inputStream)
-        private val output = DataOutputStream(socket.outputStream)
+        private val input  = DataInputStream(socket.inputStream.buffered(CHUNK_SIZE))
+        private val output = DataOutputStream(socket.outputStream.buffered(CHUNK_SIZE))
 
         @Volatile private var running = true
 
