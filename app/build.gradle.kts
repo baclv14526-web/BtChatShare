@@ -40,8 +40,17 @@ android {
         }
     }
 
-    // APK được đổi tên trong workflow CI (bước "Rename APK")
-    // vì BaseVariantOutputImpl là internal AGP API không ổn định trên AGP 8.x
+    // ── Đặt tên file APK output: BtChatShare_{version}_{buildType}.apk ────
+    applicationVariants.all {
+        val variant = this
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                output.outputFileName =
+                    "BtChatShare_${variant.versionName}_${variant.buildType.name}.apk"
+            }
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -79,6 +88,6 @@ dependencies {
     ksp("androidx.room:room-compiler:$roomVersion")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
 }
