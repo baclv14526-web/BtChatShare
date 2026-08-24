@@ -5,7 +5,6 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -66,10 +65,7 @@ class MainActivity : AppCompatActivity(), BluetoothChatService.Listener {
 
     override fun onResume() {
         super.onResume()
-        // Đặt lại listener — cũng flush pending onConnected nếu socket vừa connect
-        // trong lúc chuyển từ DeviceListActivity về đây
         app.currentListener = this
-        Log.d("MainActivity", "onResume: listener set, btState=${app.chatService.state}")
     }
 
     override fun onPause() {
