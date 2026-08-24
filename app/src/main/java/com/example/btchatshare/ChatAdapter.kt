@@ -6,12 +6,17 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
+import com.example.btchatshare.db.MessageEntity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class ChatAdapter(private val messages: MutableList<ChatMessage>) :
-    RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+class ChatAdapter(
+    private val messages: MutableList<ChatMessage>,
+    var onOpenFileClick: ((ChatMessage) -> Unit)? = null,
+    var onOpenLocationClick: ((ChatMessage) -> Unit)? = null,
+    var onItemLongClick: ((ChatMessage) -> Unit)? = null
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
         private const val TYPE_SENT     = 1
@@ -21,8 +26,12 @@ class ChatAdapter(private val messages: MutableList<ChatMessage>) :
     }
 
     class MsgHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val tvMessage:   TextView = itemView.findViewById(R.id.tvMessage)
-        val tvTimestamp: TextView = itemView.findViewById(R.id.tvTimestamp)
+        val layoutBubble:      View = itemView.findViewById(R.id.layoutBubble)
+        val tvMessage:         TextView = itemView.findViewById(R.id.tvMessage)
+        val tvTimestamp:       TextView = itemView.findViewById(R.id.tvTimestamp)
+        val layoutFileActions: View? = itemView.findViewById(R.id.layoutFileActions)
+        val btnOpenFile:       View? = itemView.findViewById(R.id.btnOpenFile)
+        val btnOpenLocation:   View? = itemView.findViewById(R.id.btnOpenLocation)
     }
 
     override fun getItemViewType(position: Int) =
@@ -41,6 +50,22 @@ class ChatAdapter(private val messages: MutableList<ChatMessage>) :
             tvMessage.text = msg.text
             // Hiện giờ:phút; nếu tin nhắn từ hôm qua trở về trước thì hiện ngày đầy đủ
             tvTimestamp.text = formatTime(msg.timestamp)
+
+            val hasFile = !msg.filePath.isNullOrBlank()
+            if (hasFile) {
+                layoutFileActions?.visibility = View.VISIBLE
+                btnOpenFile?.setOnClickListener { onOpenFileClick?.invoke(msg) }
+                btnOpenLocation?.setOnClickListener { onOpenLocationClick?.invoke(msg) }
+            } else {
+                layoutFileActions?.visibility = View.GONE
+                btnOpenFile?.setOnClickListener(null)
+                btnOpenLocation?.setOnClickListener(null)
+            }
+
+            layoutBubble.setOnLongClickListener {
+                onItemLongClick?.invoke(msg)
+                true
+            }
         }
     }
 
@@ -61,7 +86,9 @@ class ChatAdapter(private val messages: MutableList<ChatMessage>) :
             override fun getOldListSize() = messages.size
             override fun getNewListSize() = newList.size
             override fun areItemsTheSame(o: Int, n: Int) =
-                messages[o].timestamp == newList[n].timestamp && messages[o].text == newList[n].text
+                messages[o].timestamp == newList[n].timestamp &&
+                messages[o].text == newList[n].text &&
+                messages[o].filePath == newList[n].filePath
             override fun areContentsTheSame(o: Int, n: Int) =
                 messages[o] == newList[n]
         })
@@ -76,3 +103,4 @@ class ChatAdapter(private val messages: MutableList<ChatMessage>) :
         return if (ts >= todayStart) timeFmt.format(Date(ts)) else dateFmt.format(Date(ts))
     }
 }
+

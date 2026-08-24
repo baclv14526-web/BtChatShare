@@ -85,10 +85,12 @@ class App : Application() {
 
                 override fun onFileReceived(fileName: String, file: File) {
                     val address = chatService.connectedDeviceAddress ?: "unknown"
+                    val sizeText = FileUtils.formatFileSize(file.length())
                     applicationScope.launch {
                         chatRepository.saveFileReceived(
-                            address,
-                            "✅ Đã nhận file: $fileName (${file.length()} bytes)\nLưu tại: ${file.absolutePath}"
+                            sessionId   = address,
+                            description = "✅ Đã nhận file: $fileName ($sizeText)\n📂 Lưu tại: ${file.absolutePath}",
+                            filePath    = file.absolutePath
                         )
                     }
                     if (settings.soundOnFile)   notifHelper.playFileSound()

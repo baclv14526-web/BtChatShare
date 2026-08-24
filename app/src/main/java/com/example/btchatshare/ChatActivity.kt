@@ -47,7 +47,24 @@ class ChatActivity : AppCompatActivity(), BluetoothChatService.Listener {
         sessionId = intent.getStringExtra(EXTRA_DEVICE_ADDRESS) ?: "unknown"
         title     = intent.getStringExtra(EXTRA_DEVICE_NAME)    ?: getString(R.string.app_name)
 
-        chatAdapter = ChatAdapter(mutableListOf())
+        chatAdapter = ChatAdapter(
+            messages = mutableListOf(),
+            onOpenFileClick = { msg ->
+                msg.filePath?.let { path ->
+                    FileUtils.openFile(this, File(path))
+                }
+            },
+            onOpenLocationClick = { msg ->
+                msg.filePath?.let { path ->
+                    FileUtils.openFileLocation(this, File(path))
+                }
+            },
+            onItemLongClick = { msg ->
+                msg.filePath?.let { path ->
+                    FileUtils.showFileOptionsDialog(this, path)
+                }
+            }
+        )
         binding.recyclerMessages.layoutManager = LinearLayoutManager(this).apply {
             stackFromEnd = true
         }

@@ -22,23 +22,25 @@ class ChatRepository(private val dao: MessageDao) {
             )
         )
 
-    suspend fun saveFileSent(sessionId: String, description: String): Long =
+    suspend fun saveFileSent(sessionId: String, description: String, filePath: String? = null): Long =
         dao.insert(
             MessageEntity(
                 sessionId = sessionId,
                 text      = description,
                 isMine    = true,
-                type      = MessageEntity.TYPE_FILE_SENT
+                type      = MessageEntity.TYPE_FILE_SENT,
+                filePath  = filePath
             )
         )
 
-    suspend fun saveFileReceived(sessionId: String, description: String): Long =
+    suspend fun saveFileReceived(sessionId: String, description: String, filePath: String? = null): Long =
         dao.insert(
             MessageEntity(
                 sessionId = sessionId,
                 text      = description,
                 isMine    = false,
-                type      = MessageEntity.TYPE_FILE_RECEIVED
+                type      = MessageEntity.TYPE_FILE_RECEIVED,
+                filePath  = filePath
             )
         )
 
@@ -67,8 +69,11 @@ class ChatRepository(private val dao: MessageDao) {
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private fun MessageEntity.toChatMessage() = ChatMessage(
+        id        = id,
         text      = text,
         isMine    = isMine,
+        type      = type,
+        filePath  = filePath,
         timestamp = timestamp
     )
 }

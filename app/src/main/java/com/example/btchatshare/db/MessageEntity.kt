@@ -30,6 +30,9 @@ data class MessageEntity(
 
     val type: String = TYPE_TEXT,
 
+    @ColumnInfo(name = "file_path")
+    val filePath: String? = null,
+
     val timestamp: Long = System.currentTimeMillis()
 ) {
     companion object {
