@@ -188,7 +188,7 @@ class BluetoothChatService(
         override fun run() {
             name = "AcceptThread_secure_$secure"
             var looping = true
-            while (looping && state != STATE_CONNECTED) {
+            while (looping && this@BluetoothChatService.state != STATE_CONNECTED) {
                 val socket: BluetoothSocket? = try {
                     serverSocket?.accept()
                 } catch (e: IOException) {
@@ -197,7 +197,7 @@ class BluetoothChatService(
                 }
                 if (socket != null) {
                     synchronized(this@BluetoothChatService) {
-                        when (state) {
+                        when (this@BluetoothChatService.state) {
                             STATE_LISTEN, STATE_CONNECTING -> {
                                 connected(socket, socket.remoteDevice)
                             }
