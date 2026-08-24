@@ -15,6 +15,10 @@ jobs:
     name: Build debug APK
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -58,18 +62,22 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      # --info để thấy lỗi Kotlin compiler đầy đủ nếu build thất bại
       - name: Build debug APK
-        run: ./gradlew assembleDebug --info --stacktrace --no-daemon 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --info --stacktrace --no-daemon 2>&1 | tee build.log
+          echo "Exit code: $?"
 
-      # In lỗi ra riêng khi build thất bại
-      - name: Show errors if failed
+      - name: Show Kotlin errors on failure
         if: failure()
         run: |
-          echo "=== Kotlin / AAPT errors ==="
-          grep -E "error:|\.kt:[0-9]+|exception:|Exception" build.log | grep -v "^w:" | head -80 || true
+          echo "====== KOTLIN COMPILER ERRORS ======"
+          grep -E "^e: |error:|\.kt:[0-9]" build.log | head -50 || true
+          echo "====== KAPT ERRORS ======"
+          grep -iE "kapt|annotation" build.log | grep -iE "error|fail" | head -30 || true
+          echo "====== LAST 100 LINES OF LOG ======"
+          tail -100 build.log || true
 
-      # Đổi tên APK theo format BtChatShare_{version}_debug.apk
       - name: Rename APK
         id: apk
         run: |
@@ -78,7 +86,7 @@ jobs:
           DEST="app/build/outputs/apk/debug/BtChatShare_${VERSION}_debug.apk"
           mv "$SRC" "$DEST"
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
-          echo "Renamed: $DEST"
+          echo "Renamed to: $DEST"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
